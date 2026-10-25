@@ -5,7 +5,7 @@
 ### Built by Mythri Potluri
 
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/mythripotluri1/)
-[![Portfolio](https://img.shields.io/badge/Portfolio-Visit-7C3AED?style=for-the-badge&logo=github&logoColor=white)](https://mythrip11.github.io/ai-agent-portfolio/)
+[![Portfolio](https://img.shields.io/badge/Portfolio-Visit-7C3AED?style=for-the-badge&logo=github&logoColor=white)](https://mythri-portfolio-cyan.vercel.app/)
 [![GitHub](https://img.shields.io/badge/GitHub-Follow-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/mythrip11)
 [![Email](https://img.shields.io/badge/Email-Contact-06B6D4?style=for-the-badge&logo=gmail&logoColor=white)](mailto:mythrip11@gmail.com)
 [![Location](https://img.shields.io/badge/New_York_City-New_York-22C55E?style=for-the-badge&logo=googlemaps&logoColor=white)]()
