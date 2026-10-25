@@ -183,19 +183,6 @@ Or open `index.html` directly in any browser — no server needed.
 
 ---
 
-## About Me
-
-I'm an AI Engineer based in New York City focused on building practical workflow automation. I specialize in industries where AI adoption is still early — healthcare, logistics, construction — because that's where the manual work is heaviest and the wins from automation are the biggest.
-
-If you're a company with a repetitive operational process that your team is doing by hand, I build the agent that takes it off their plate.
-
-**Get in touch:**
-- Email: [mythrip11@gmail.com](mailto:mythrip11@gmail.com)
-- LinkedIn: [linkedin.com/in/mythripotluri1](https://www.linkedin.com/in/mythripotluri1/)
-- Portfolio: [mythrip11.github.io/ai-agent-portfolio](https://mythrip11.github.io/ai-agent-portfolio/)
-
----
-
 <div align="center">
 Built with n8n + Claude &nbsp;·&nbsp; New York City, New York
 </div>
