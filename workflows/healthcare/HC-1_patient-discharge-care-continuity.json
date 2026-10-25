@@ -1,0 +1,377 @@
+{
+  "name": "HC-1: Patient Discharge & Care Continuity Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "patient-discharge",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "eb2c303a-320b-4afb-8635-e94f4c6427b7",
+      "name": "EHR Discharge Event",
+      "webhookId": "5c6281f3-2927-4614-81d6-5f7a41e40f47"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\n\nconst b = $input.first().json.body || {};\nreturn [{ json: {\n  patient_id: b.patient_id || 'UNKNOWN',\n  age: b.age ?? null,\n  diagnosis: b.diagnosis || '',\n  comorbidities: b.comorbidities || [],\n  length_of_stay_days: b.length_of_stay_days ?? null,\n  prior_admissions_12mo: b.prior_admissions_12mo ?? 0,\n  discharge_disposition: b.discharge_disposition || 'home',\n  medications_count: b.medications_count ?? null,\n  discharged_at: b.discharged_at || new Date().toISOString()\n}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ],
+      "id": "b9613d82-3f3b-47cf-9701-22f5b0c833e4",
+      "name": "Normalize Discharge Payload"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Assess the 30-day readmission risk for this discharged patient: {{ JSON.stringify($json) }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a clinical decision-support assistant. Using the patient data, return a 30-day readmission risk level (high, medium or low), a score from 0 to 100, the key risk factors, and one recommended next action. This is fictional demo data."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        448,
+        0
+      ],
+      "id": "2bfd2dcb-6419-4782-b918-8ecf7ba9f013",
+      "name": "Patient Risk Assessment Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "claude-sonnet-5",
+          "cachedResultName": "Claude Sonnet 5"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.6,
+      "position": [
+        320,
+        208
+      ],
+      "id": "d4fb8ef9-e3be-4c20-8d80-eb780c92d526",
+      "name": "Anthropic Chat Model",
+      "credentials": {
+        "anthropicApi": {
+          "id": "Jegc9bDEyLUiQn1K",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\"risk_level\":\"high\",\"risk_score\":82,\"key_factors\":[\"prior admissions\",\"heart failure\"],\"recommended_action\":\"Physician call within 24 hours\"}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        624,
+        208
+      ],
+      "id": "63dafb55-08c9-40a3-bb69-f2d8f1c061ee",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.output.risk_level }}",
+                    "rightValue": "high",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "ea42f330-4238-4464-80ba-882f6afd909d"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "High"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "274364f2-be0c-4e93-b2f8-5914377a837c",
+                    "leftValue": "={{ $json.output.risk_level }}",
+                    "rightValue": "medium",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Medium"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "6f9ff6c1-d2c6-4666-b5ac-eca38001d40c",
+                    "leftValue": "={{ $json.output.risk_level }}",
+                    "rightValue": "low",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Low"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        816,
+        0
+      ],
+      "id": "31a80c7e-72a1-4c5b-93bd-0d65de48d039",
+      "name": "Risk Level Router"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        -176
+      ],
+      "id": "6ac7c075-9643-4517-b1bc-e0789043415d",
+      "name": "Alert Physician - Urgent (placeholder)"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        0
+      ],
+      "id": "19eabf69-6358-41c3-a3bd-1842f1a0f3e8",
+      "name": "Patient Follow-up Reminder (placeholder)"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        160
+      ],
+      "id": "7f7bd06b-8ab2-4454-b673-f82f5de6763e",
+      "name": "Log Routine Care Plan"
+    },
+    {
+      "parameters": {
+        "sendTo": "mythrip11@gmail.com",
+        "subject": "=URGENT: High readmission risk - {{ $('Normalize Discharge Payload').item.json.patient_id }}",
+        "message": "=High-risk discharge detected (demo data).      Patient: {{ $('Normalize Discharge Payload').item.json.patient_id }}      Diagnosis: {{ $('Normalize Discharge Payload').item.json.diagnosis }}      Risk score: {{ $('Patient Risk Assessment Agent').item.json.output.risk_score }}      Key factors: {{ $('Patient Risk Assessment Agent').item.json.output.key_factors.join(', ') }}      Recommended action: {{ $('Patient Risk Assessment Agent').item.json.output.recommended_action }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1264,
+        -176
+      ],
+      "id": "edb86d9b-5780-4516-b57d-53cb2144ecd0",
+      "name": "Alert Physician - Urgent (Gmail)",
+      "webhookId": "a2064f09-5dac-4500-b518-ed1b292453eb",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "J4codUgGuAGiuqtx",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "mythrip11@gmail.com",
+        "subject": "=Follow-up reminder - Patient {{ $('Normalize Discharge Payload').item.json.patient_id }}",
+        "message": "=     Medium-risk discharge (demo data).      Patient: {{ $('Normalize Discharge Payload').item.json.patient_id }}      Diagnosis: {{ $('Normalize Discharge Payload').item.json.diagnosis }}      Risk score: {{ $('Patient Risk Assessment Agent').item.json.output.risk_score }}      Recommended action: {{ $('Patient Risk Assessment Agent').item.json.output.recommended_action }}       Please schedule a follow-up check within 7 days.",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1264,
+        0
+      ],
+      "id": "8281641b-8d7b-41f3-8f23-259b3c60511e",
+      "name": "Patient Follow-up Reminder (Gmail)",
+      "webhookId": "98a07cec-aea2-4ca3-bae9-dae9fe8df94f",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "J4codUgGuAGiuqtx",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "EHR Discharge Event": {
+      "main": [
+        [
+          {
+            "node": "Normalize Discharge Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Discharge Payload": {
+      "main": [
+        [
+          {
+            "node": "Patient Risk Assessment Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Patient Risk Assessment Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Patient Risk Assessment Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Patient Risk Assessment Agent": {
+      "main": [
+        [
+          {
+            "node": "Risk Level Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Risk Level Router": {
+      "main": [
+        [
+          {
+            "node": "Alert Physician - Urgent (placeholder)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Patient Follow-up Reminder (placeholder)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Routine Care Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert Physician - Urgent (placeholder)": {
+      "main": [
+        [
+          {
+            "node": "Alert Physician - Urgent (Gmail)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Patient Follow-up Reminder (placeholder)": {
+      "main": [
+        [
+          {
+            "node": "Patient Follow-up Reminder (Gmail)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "517c6399-84e2-4504-a3ef-4ea2fb827bd7",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "nodeGroups": [],
+  "id": "O6sxreRhEozwFEw4",
+  "tags": []
+}

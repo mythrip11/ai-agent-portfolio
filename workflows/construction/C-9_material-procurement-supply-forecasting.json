@@ -1,0 +1,401 @@
+{
+  "name": "C-9: Material Procurement & Supply Forecasting Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 6
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        112
+      ],
+      "id": "483d488e-5aff-473e-934d-99955169c5d0",
+      "name": "Daily Procurement Monitor"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Mock active project schedules (fictional) - stands in for a project management platform API\nconst projects = [\n  { project_id: 'P-9001', project: 'Riverside Tower (demo)', pm: 'PM One (demo)', upcoming: [ { material: 'Rebar (#6)', unit: 'tons', qty_needed: 40, needed_in_days: 5 }, { material: 'Ready-mix concrete', unit: 'cubic yards', qty_needed: 300, needed_in_days: 6 } ] },\n  { project_id: 'P-9002', project: 'Harbor Warehouse (demo)', pm: 'PM Two (demo)', upcoming: [ { material: 'Structural steel beams', unit: 'pieces', qty_needed: 60, needed_in_days: 20 }, { material: 'Anchor bolts', unit: 'boxes', qty_needed: 25, needed_in_days: 9 } ] },\n  { project_id: 'P-9003', project: 'Elm Street Apartments (demo)', pm: 'PM Three (demo)', upcoming: [ { material: 'Drywall sheets', unit: 'sheets', qty_needed: 800, needed_in_days: 4 }, { material: 'Vinyl windows', unit: 'units', qty_needed: 60, needed_in_days: 12 } ] },\n  { project_id: 'P-9004', project: 'Cedar Court Offices (demo)', pm: 'PM Four (demo)', upcoming: [ { material: 'Roofing membrane', unit: 'rolls', qty_needed: 30, needed_in_days: 15 }, { material: 'Insulation batts', unit: 'bundles', qty_needed: 120, needed_in_days: 10 } ] }\n];\nreturn [{ json: { fetched_at: new Date().toISOString(), projects } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        112
+      ],
+      "id": "08993f04-7b68-4f71-9391-ecc56a50182b",
+      "name": "Fetch Active Project Schedules (mock)"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "projects",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1.1,
+      "position": [
+        448,
+        112
+      ],
+      "id": "fc2ffa16-d98d-4efc-a01f-9c4b4809bd07",
+      "name": "Split Projects"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Mock inventory levels + supplier lead times (fictional) - stands in for inventory/procurement systems\nconst stock = {\n  'Rebar (#6)': { on_hand: 12, lead_time_days: 10, supplier: 'Demo Steel Supply' },\n  'Ready-mix concrete': { on_hand: 0, lead_time_days: 1, supplier: 'Demo Concrete Co' },\n  'Structural steel beams': { on_hand: 70, lead_time_days: 14, supplier: 'Demo Steel Supply' },\n  'Anchor bolts': { on_hand: 40, lead_time_days: 5, supplier: 'Demo Fasteners' },\n  'Drywall sheets': { on_hand: 900, lead_time_days: 3, supplier: 'Demo Building Products' },\n  'Vinyl windows': { on_hand: 20, lead_time_days: 21, supplier: 'Demo Window Works' },\n  'Roofing membrane': { on_hand: 45, lead_time_days: 7, supplier: 'Demo Roofing Supply' },\n  'Insulation batts': { on_hand: 150, lead_time_days: 4, supplier: 'Demo Building Products' }\n};\nconst upcoming = $json.upcoming.map(m => ({ ...m, ...(stock[m.material] || { on_hand: 0, lead_time_days: 7, supplier: 'Unknown' }) }));\nreturn { json: { ...$json, upcoming } };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        112
+      ],
+      "id": "bd88d03f-07a1-48bb-82e6-9447ddbea5ca",
+      "name": "Fetch Inventory and Lead Times (mock)"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Project: {{ $json.project_id }} - {{ $json.project }}\nProject manager: {{ $json.pm }}\n\nUpcoming material needs with current stock and supplier lead times:\n{{ JSON.stringify($json.upcoming, null, 2) }}",
+        "options": {
+          "systemMessage": "You are a construction materials procurement analyst. For one project, compare each upcoming material need against on-hand stock and the supplier lead time. A material is short if on_hand is less than qty_needed. A shortage is CRITICAL if the supplier lead time in days is longer than the days until the material is needed (an order placed today would arrive late), or if the material is needed within 7 days and stock is short. Set critical_shortage to true if any material has a critical shortage. For each shortage, give the material, shortfall, and an order_qty (shortfall plus a 10% buffer, rounded up), and an urgency of critical or normal. If everything is covered, return an empty shortages list and critical_shortage false. Add a one-sentence summary. All data is fictional demo data. Respond with ONLY a single JSON object and nothing else (no markdown, no code fences), with exactly these keys: project_id (string), critical_shortage (true or false), shortages (array of objects with keys material, shortfall, order_qty, urgency), summary (string)."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        896,
+        112
+      ],
+      "id": "87a19f1b-552a-4ed9-a6c4-441a98993dbc",
+      "name": "Supply Forecasting Agent",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-sonnet-5",
+          "mode": "list",
+          "cachedResultName": "Claude Sonnet 5"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.6,
+      "position": [
+        848,
+        320
+      ],
+      "id": "2331d4c2-acf5-442d-9994-e6f6b6ee7e97",
+      "name": "Anthropic Chat Model",
+      "credentials": {
+        "anthropicApi": {
+          "id": "Jegc9bDEyLUiQn1K",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Parse the agent's JSON reply into an `output` object. If the reply is empty or invalid,\n// fall back to a manual-review record instead of failing the run.\nconst p = $('Fetch Inventory and Lead Times (mock)').item.json;\nconst raw = String($json.output ?? '').trim();\nlet a = null;\ntry {\n  const s = raw.indexOf('{'), e = raw.lastIndexOf('}');\n  if (s !== -1 && e > s) a = JSON.parse(raw.slice(s, e + 1));\n} catch (err) { a = null; }\nif (!a) a = { project_id: p.project_id, critical_shortage: false, shortages: [], summary: 'Automated forecast returned no usable result - manual review required.' };\nif (!Array.isArray(a.shortages)) a.shortages = [];\na.critical_shortage = (a.critical_shortage === true || a.critical_shortage === 'true');\nreturn { json: { output: a } };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        112
+      ],
+      "id": "c0c56311-35bc-4f20-a34f-20cd2807e285",
+      "name": "Parse Agent Output"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "a57a57d9-1fc1-4c11-bc98-d3a185b1d0ed",
+              "leftValue": "={{ $json.output.critical_shortage }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        1344,
+        112
+      ],
+      "id": "3361b9e1-c785-4328-b7b6-462a91fa748f",
+      "name": "Critical Shortages Found?"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Mock purchase order creation (fictional) - stands in for a procurement system API\nconst a = $('Parse Agent Output').item.json.output;\nconst p = $('Fetch Inventory and Lead Times (mock)').item.json;\nconst lines = (a.shortages || []).map(s => `${s.order_qty} x ${s.material} (${s.urgency})`);\nreturn { json: { po_id: 'PO-' + Math.floor(Math.random()*90000+10000), project_id: a.project_id, project: p.project, pm: p.pm, po_lines: lines.join('; '), summary: a.summary, created_at: new Date().toISOString() } };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        0
+      ],
+      "id": "90d008b2-22b7-4079-9f33-520639bd61f0",
+      "name": "Create Urgent Purchase Orders (mock)"
+    },
+    {
+      "parameters": {
+        "sendTo": "mythrip11@gmail.com",
+        "subject": "=CRITICAL material shortage: {{ $('Create Urgent Purchase Orders (mock)').item.json.project }}",
+        "message": "=Hello {{ $('Create Urgent Purchase Orders (mock)').item.json.pm }},\n\nCritical material shortage on {{ $('Create Urgent Purchase Orders (mock)').item.json.project }}. Urgent purchase order {{ $('Create Urgent Purchase Orders (mock)').item.json.po_id }} was created.\n\nOrder lines: {{ $('Create Urgent Purchase Orders (mock)').item.json.po_lines }}\n\nSummary: {{ $('Create Urgent Purchase Orders (mock)').item.json.summary }}\n\n(Demo data - fictional project)",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1792,
+        0
+      ],
+      "id": "ed8cfef2-7eb0-4f22-b02b-21caf7114e63",
+      "name": "Alert PM - Critical Material Shortage (Gmail)",
+      "webhookId": "6cdbd8e7-a36a-4ca1-a01b-1624a7c927d8",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "J4codUgGuAGiuqtx",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "4e5b4df8-6bad-459a-a6d5-564b5aba2979",
+              "name": "project_id",
+              "value": "={{ $json.output.project_id }}",
+              "type": "string"
+            },
+            {
+              "id": "7b27a04a-50df-4203-bbad-5cfedb1abc5a",
+              "name": "project",
+              "value": "={{ $('Fetch Inventory and Lead Times (mock)').item.json.project }}",
+              "type": "string"
+            },
+            {
+              "id": "e26935b9-33d2-4110-a810-e242171ff66a",
+              "name": "pm",
+              "value": "={{ $('Fetch Inventory and Lead Times (mock)').item.json.pm }}",
+              "type": "string"
+            },
+            {
+              "id": "e97e89fe-098f-4fe1-9df9-bbc560186465",
+              "name": "status",
+              "value": "no_action_needed",
+              "type": "string"
+            },
+            {
+              "id": "7ba31537-9e04-4e16-8fed-41186c191291",
+              "name": "summary",
+              "value": "={{ $json.output.summary }}",
+              "type": "string"
+            },
+            {
+              "id": "9ce33397-b630-4d9a-acfa-197512ba2ab9",
+              "name": "checked_at",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1568,
+        224
+      ],
+      "id": "da9f9468-8344-4b13-a1ba-1c90ae24cedf",
+      "name": "Log Supply Status - No Action Needed"
+    },
+    {
+      "parameters": {
+        "sendTo": "mythrip11@gmail.com",
+        "subject": "=Daily supply summary: {{ $json.project }}",
+        "message": "=Hello {{ $json.pm }},\n\nSupply status for {{ $json.project }}: no action needed.\n\n{{ $json.summary }}\n\n(Demo data - fictional project)",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1792,
+        224
+      ],
+      "id": "b3264542-d6c8-4127-b8a2-5f8bfa053c47",
+      "name": "Send Daily Supply Summary to PM (Gmail)",
+      "webhookId": "28ad59d3-9553-4947-bf3b-a106cd6c73b8",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "J4codUgGuAGiuqtx",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Daily Procurement Monitor": {
+      "main": [
+        [
+          {
+            "node": "Fetch Active Project Schedules (mock)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Active Project Schedules (mock)": {
+      "main": [
+        [
+          {
+            "node": "Split Projects",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Projects": {
+      "main": [
+        [
+          {
+            "node": "Fetch Inventory and Lead Times (mock)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Inventory and Lead Times (mock)": {
+      "main": [
+        [
+          {
+            "node": "Supply Forecasting Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Supply Forecasting Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supply Forecasting Agent": {
+      "main": [
+        [
+          {
+            "node": "Parse Agent Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Agent Output": {
+      "main": [
+        [
+          {
+            "node": "Critical Shortages Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Critical Shortages Found?": {
+      "main": [
+        [
+          {
+            "node": "Create Urgent Purchase Orders (mock)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Supply Status - No Action Needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Urgent Purchase Orders (mock)": {
+      "main": [
+        [
+          {
+            "node": "Alert PM - Critical Material Shortage (Gmail)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Supply Status - No Action Needed": {
+      "main": [
+        [
+          {
+            "node": "Send Daily Supply Summary to PM (Gmail)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "0271b46e-9ac3-4975-b561-ecab8b3aab31",
+  "nodeGroups": [],
+  "id": "Q7BE2MOBu3Q9kxCJ",
+  "tags": []
+}

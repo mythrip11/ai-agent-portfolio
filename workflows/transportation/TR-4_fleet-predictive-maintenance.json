@@ -1,0 +1,333 @@
+{
+  "name": "TR-4: Fleet Predictive Maintenance Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        112
+      ],
+      "id": "147d60b1-d2d2-4a79-ad4e-7fca5c6e626f",
+      "name": "Hourly Telemetry Check"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Mock fleet telematics (fictional vehicles) - stands in for a real telematics API\nconst vehicles = [\n  { vehicle_id: 'TRK-101', type: 'Class 8 tractor', odometer_miles: 412300, engine_temp_f: 196, oil_pressure_psi: 52, battery_voltage: 13.9, brake_pad_pct_remaining: 64, tire_pressure_psi_min: 98, dtc_codes: [], days_since_service: 38 },\n  { vehicle_id: 'TRK-102', type: 'Class 8 tractor', odometer_miles: 538900, engine_temp_f: 231, oil_pressure_psi: 24, battery_voltage: 12.1, brake_pad_pct_remaining: 41, tire_pressure_psi_min: 91, dtc_codes: ['P0217', 'P0524'], days_since_service: 121 },\n  { vehicle_id: 'VAN-207', type: 'Delivery van', odometer_miles: 88450, engine_temp_f: 192, oil_pressure_psi: 48, battery_voltage: 14.1, brake_pad_pct_remaining: 12, tire_pressure_psi_min: 38, dtc_codes: [], days_since_service: 74 },\n  { vehicle_id: 'BUS-310', type: 'Transit bus', odometer_miles: 205700, engine_temp_f: 199, oil_pressure_psi: 45, battery_voltage: 13.7, brake_pad_pct_remaining: 58, tire_pressure_psi_min: 101, dtc_codes: ['P0420'], days_since_service: 95 },\n  { vehicle_id: 'TRK-115', type: 'Class 8 tractor', odometer_miles: 150200, engine_temp_f: 194, oil_pressure_psi: 55, battery_voltage: 14.0, brake_pad_pct_remaining: 83, tire_pressure_psi_min: 100, dtc_codes: [], days_since_service: 20 }\n];\nreturn [{ json: { fetched_at: new Date().toISOString(), vehicles } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        112
+      ],
+      "id": "5802daef-0ec0-4f1e-ad73-ef416831a7fe",
+      "name": "Fetch Fleet Telemetry (mock)"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "vehicles",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1.1,
+      "position": [
+        448,
+        112
+      ],
+      "id": "9f56c5e2-0c64-4604-a5a0-3a7c094f0bf5",
+      "name": "Split Vehicle Records"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Vehicle telematics snapshot:\nVehicle: {{ $json.vehicle_id }} ({{ $json.type }})\nOdometer: {{ $json.odometer_miles }} miles\nDays since last service: {{ $json.days_since_service }}\nEngine temp: {{ $json.engine_temp_f }} F\nOil pressure: {{ $json.oil_pressure_psi }} psi\nBattery: {{ $json.battery_voltage }} V\nBrake pad remaining: {{ $json.brake_pad_pct_remaining }}%\nLowest tire pressure: {{ $json.tire_pressure_psi_min }} psi\nActive DTC codes: {{ $json.dtc_codes.length ? $json.dtc_codes.join(', ') : 'none' }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a fleet predictive-maintenance analyst. Review one vehicle's telematics snapshot (engine temperature, oil pressure, battery voltage, brake pad life, tire pressure, diagnostic trouble codes, days since service). Decide whether maintenance is needed soon. Urgency: critical = unsafe or imminent failure (schedule within 1 day); high = likely failure within about 2 weeks (3 days); medium = degrading component (7 days); low = healthy. Typical thresholds: oil pressure under 30 psi, engine temp above 220F, battery under 12.4V, brake pads under 20%, and any active DTC code warrant attention. Name the single most likely failing component. All data is fictional demo data. Respond only via the structured output."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        672,
+        112
+      ],
+      "id": "1fde08aa-287b-4cee-ab5b-f919d3502b9e",
+      "name": "Predictive Maintenance Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-sonnet-5",
+          "mode": "list",
+          "cachedResultName": "Claude Sonnet 5"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.6,
+      "position": [
+        624,
+        320
+      ],
+      "id": "1928ba7b-ab87-4d75-8735-1858d8cfd03a",
+      "name": "Anthropic Chat Model",
+      "credentials": {
+        "anthropicApi": {
+          "id": "Jegc9bDEyLUiQn1K",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"vehicle_id\": \"TRK-102\",\n  \"maintenance_needed\": true,\n  \"urgency\": \"high\",\n  \"predicted_issue\": \"Cooling system failure\",\n  \"recommended_action\": \"Inspect coolant system and replace thermostat\",\n  \"rationale\": \"Engine temp is high, oil pressure is low and overheating DTC codes are active.\"\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        784,
+        320
+      ],
+      "id": "dd6419f3-c656-4878-af80-6667cede4a5e",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "79e907b6-3c41-4252-918e-8152e9a0c030",
+              "leftValue": "={{ $json.output.maintenance_needed }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        1024,
+        112
+      ],
+      "id": "ddff19d4-21f8-40d4-b0d0-c838b68d1d8e",
+      "name": "Maintenance Needed?"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Mock service scheduling (fictional) - stands in for a fleet management API\nconst a = $('Predictive Maintenance Agent').item.json.output;\nconst v = $('Split Vehicle Records').item.json;\nconst d = new Date(); d.setDate(d.getDate() + (a.urgency === 'critical' ? 1 : a.urgency === 'high' ? 3 : 7));\nreturn { json: { vehicle_id: a.vehicle_id, vehicle_type: v.type, urgency: a.urgency, predicted_issue: a.predicted_issue, recommended_action: a.recommended_action, rationale: a.rationale, appointment_id: 'SVC-' + Math.floor(Math.random()*90000+10000), appointment_date: d.toISOString().slice(0,10), shop: 'Demo Fleet Service Center' } };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1248,
+        0
+      ],
+      "id": "13fc6829-bc48-46db-a005-a38abde70457",
+      "name": "Schedule Service Appointment (mock)"
+    },
+    {
+      "parameters": {
+        "sendTo": "mythrip11@gmail.com",
+        "subject": "=Fleet alert [{{ $json.urgency.toUpperCase() }}]: {{ $json.vehicle_id }} needs service",
+        "message": "=Vehicle {{ $json.vehicle_id }} ({{ $json.vehicle_type }}) is at risk.\n\nUrgency: {{ $json.urgency }}\nPredicted issue: {{ $json.predicted_issue }}\nRecommended action: {{ $json.recommended_action }}\nAI rationale: {{ $json.rationale }}\n\nService appointment {{ $json.appointment_id }} booked for {{ $json.appointment_date }} at {{ $json.shop }}.\n\n(Demo data - fictional vehicle)",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1472,
+        0
+      ],
+      "id": "7f12a209-2edb-41d8-9166-8820221eea92",
+      "name": "Alert Fleet Manager (Gmail)",
+      "webhookId": "6b297fa9-d223-490d-ae8c-cc7c686a4e97",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "J4codUgGuAGiuqtx",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "bbbffc4b-20ed-425f-96d1-99125a73abf1",
+              "name": "vehicle_id",
+              "value": "={{ $('Predictive Maintenance Agent').item.json.output.vehicle_id }}",
+              "type": "string"
+            },
+            {
+              "id": "37583765-5387-4f08-9d02-d7b751bf0a57",
+              "name": "maintenance_needed",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "47c1a914-c168-4e2c-b5b6-b5c73b8e1782",
+              "name": "status",
+              "value": "healthy",
+              "type": "string"
+            },
+            {
+              "id": "bd4e67fa-4d09-4344-8ccc-db7fdc296b84",
+              "name": "rationale",
+              "value": "={{ $('Predictive Maintenance Agent').item.json.output.rationale }}",
+              "type": "string"
+            },
+            {
+              "id": "e2c0e104-a55b-48fb-ae52-3a7a3957124b",
+              "name": "checked_at",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1248,
+        224
+      ],
+      "id": "9650301e-c92c-41f3-aafc-b370aafc1a81",
+      "name": "Log Healthy Vehicle Status"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Hourly Telemetry Check": {
+      "main": [
+        [
+          {
+            "node": "Fetch Fleet Telemetry (mock)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Fleet Telemetry (mock)": {
+      "main": [
+        [
+          {
+            "node": "Split Vehicle Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Vehicle Records": {
+      "main": [
+        [
+          {
+            "node": "Predictive Maintenance Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Predictive Maintenance Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Predictive Maintenance Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Predictive Maintenance Agent": {
+      "main": [
+        [
+          {
+            "node": "Maintenance Needed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Maintenance Needed?": {
+      "main": [
+        [
+          {
+            "node": "Schedule Service Appointment (mock)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Healthy Vehicle Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Service Appointment (mock)": {
+      "main": [
+        [
+          {
+            "node": "Alert Fleet Manager (Gmail)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "81a12f8c-078a-4be4-ab2f-6bc14a22ef5f",
+  "nodeGroups": [],
+  "id": "Lk5DtDMsauN1rQD0",
+  "tags": []
+}

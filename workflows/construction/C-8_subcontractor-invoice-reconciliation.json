@@ -1,0 +1,408 @@
+{
+  "name": "C-8: Subcontractor Invoice Reconciliation Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        16,
+        48
+      ],
+      "id": "d8111de9-edbc-4d04-80cd-af44555d0596",
+      "name": "Weekly Invoice Review Trigger"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Mock pending subcontractor invoices (fictional) - stands in for an ERP / AP system\nconst invoices = [\n  { invoice_id: 'INV-8001', subcontractor: 'Alpha Electrical (demo)', project: 'Riverside Tower (demo)', billing_period: 'October', billed_amount: 48000, lines: [ { item: 'Rough-in wiring, floors 10-12', billed_pct_complete: 60 }, { item: 'Panel installation', billed_pct_complete: 100 } ], insurance_current: true, lien_waiver_attached: true },\n  { invoice_id: 'INV-8002', subcontractor: 'Bedrock Concrete (demo)', project: 'Harbor Warehouse (demo)', billing_period: 'October', billed_amount: 125000, lines: [ { item: 'Foundation pour', billed_pct_complete: 100 }, { item: 'Slab on grade', billed_pct_complete: 90 } ], insurance_current: true, lien_waiver_attached: true },\n  { invoice_id: 'INV-8003', subcontractor: 'Crestview Plumbing (demo)', project: 'Elm Street Apartments (demo)', billing_period: 'October', billed_amount: 31500, lines: [ { item: 'Underground plumbing', billed_pct_complete: 100 }, { item: 'Fixture rough-in', billed_pct_complete: 75 } ], insurance_current: false, lien_waiver_attached: true },\n  { invoice_id: 'INV-8004', subcontractor: 'Delta Drywall (demo)', project: 'Riverside Tower (demo)', billing_period: 'October', billed_amount: 22000, lines: [ { item: 'Board hanging, floors 3-5', billed_pct_complete: 100 }, { item: 'Taping and finishing', billed_pct_complete: 80 } ], insurance_current: true, lien_waiver_attached: false }\n];\nreturn [{ json: { fetched_at: new Date().toISOString(), invoices } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        48
+      ],
+      "id": "0669e35b-0014-4815-a1df-d570c5a9227d",
+      "name": "Fetch Pending Subcontractor Invoices (mock)"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "invoices",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1.1,
+      "position": [
+        464,
+        48
+      ],
+      "id": "02f3c7e6-82ae-4620-9941-f03fb2598825",
+      "name": "Split Invoices"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Mock contract + Schedule of Values (fictional) - stands in for an ERP contract lookup\nconst contracts = {\n  'INV-8001': { contract_value: 180000, previous_billed: 60000, retainage_pct: 10, sov: [ { item: 'Rough-in wiring, floors 10-12', value: 60000, actual_pct_complete: 60 }, { item: 'Panel installation', value: 30000, actual_pct_complete: 100 } ], field_note: 'Verified by site super: wiring 60% done, panels complete.' },\n  'INV-8002': { contract_value: 400000, previous_billed: 150000, retainage_pct: 10, sov: [ { item: 'Foundation pour', value: 120000, actual_pct_complete: 100 }, { item: 'Slab on grade', value: 90000, actual_pct_complete: 55 } ], field_note: 'Slab pour is only about 55% complete per site super.' },\n  'INV-8003': { contract_value: 120000, previous_billed: 40000, retainage_pct: 5, sov: [ { item: 'Underground plumbing', value: 25000, actual_pct_complete: 100 }, { item: 'Fixture rough-in', value: 28000, actual_pct_complete: 75 } ], field_note: 'Work verified and matches the invoice.' },\n  'INV-8004': { contract_value: 90000, previous_billed: 30000, retainage_pct: 10, sov: [ { item: 'Board hanging, floors 3-5', value: 18000, actual_pct_complete: 100 }, { item: 'Taping and finishing', value: 12000, actual_pct_complete: 80 } ], field_note: 'Work verified and matches the invoice.' }\n};\nconst c = contracts[$json.invoice_id] || { contract_value: 0, previous_billed: 0, retainage_pct: 10, sov: [], field_note: 'No contract found' };\nreturn { json: { ...$json, ...c } };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        688,
+        48
+      ],
+      "id": "fbde67de-a311-4772-8a55-1dc7c22a1580",
+      "name": "Fetch Contract and SOV Details (mock)"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Subcontractor invoice:\nInvoice: {{ $json.invoice_id }}\nSubcontractor: {{ $json.subcontractor }}\nProject: {{ $json.project }}\nBilling period: {{ $json.billing_period }}\nBilled amount: ${{ $json.billed_amount }}\nInvoice lines (billed % complete): {{ JSON.stringify($json.lines) }}\n\nContract value: ${{ $json.contract_value }}\nPreviously billed: ${{ $json.previous_billed }}\nRetainage: {{ $json.retainage_pct }}%\nSOV with actual % complete: {{ JSON.stringify($json.sov) }}\nField note: {{ $json.field_note }}\n\nInsurance certificate current: {{ $json.insurance_current }}\nLien waiver attached: {{ $json.lien_waiver_attached }}",
+        "options": {
+          "systemMessage": "You are an accounts-payable analyst for a general contractor reconciling one subcontractor invoice against the contract Schedule of Values (SOV). For each invoice line, compare the percent complete billed to the actual percent complete in the SOV and field note. Approve only if every line is supported by actual progress (a small difference of 2 percentage points or less is fine), insurance is current, and a lien waiver is attached. If approved, approved_amount is the billed amount and net_payable is the approved amount minus retainage (retainage_pct of the approved amount). If not approved, set approved_amount to the amount supported by actual progress (or 0 if documents are missing), and list each discrepancy clearly so the subcontractor can correct and resubmit. All data is fictional demo data.  Respond with ONLY a single JSON object and nothing else (no markdown, no code fences), with exactly these keys: invoice_id (string), approved (true or false), approved_amount (number), retainage_amount (number), net_payable (number), discrepancies (array of strings; use [\"None\"] if there are none), notes (string)."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        912,
+        48
+      ],
+      "id": "7afea8fb-ffaf-4173-b0f4-49dfee2d1aeb",
+      "name": "Invoice Reconciliation Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-sonnet-5",
+          "mode": "list",
+          "cachedResultName": "Claude Sonnet 5"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.6,
+      "position": [
+        864,
+        256
+      ],
+      "id": "0263f9c5-41c5-4d4a-97db-cf90a9f444a8",
+      "name": "Anthropic Chat Model",
+      "credentials": {
+        "anthropicApi": {
+          "id": "Jegc9bDEyLUiQn1K",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "ab084d49-7661-454d-8084-39a16d130bea",
+              "leftValue": "={{ $json.output.approved }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        1328,
+        48
+      ],
+      "id": "f3658c56-7b4f-40e4-ac5b-28af3447dbbf",
+      "name": "Invoice Approved?"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Mock ERP payment voucher (fictional) - stands in for an ERP API\nconst a = $('Parse Agent Output').item.json.output;\nconst s = $('Fetch Contract and SOV Details (mock)').item.json;\nreturn { json: { voucher_id: 'PV-' + Math.floor(Math.random()*90000+10000), invoice_id: a.invoice_id, subcontractor: s.subcontractor, project: s.project, approved_amount: a.approved_amount, retainage_withheld: a.retainage_amount, net_payable: a.net_payable, notes: a.notes, created_at: new Date().toISOString() } };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1552,
+        -64
+      ],
+      "id": "24b7e129-5642-4443-8f81-7ebcd6c85e34",
+      "name": "Create Payment Voucher in ERP (mock)"
+    },
+    {
+      "parameters": {
+        "sendTo": "mythrip11@gmail.com",
+        "subject": "=Invoice {{ $('Create Payment Voucher in ERP (mock)').item.json.invoice_id }} approved - payment scheduled",
+        "message": "=Hello {{ $('Create Payment Voucher in ERP (mock)').item.json.subcontractor }},\n\nYour invoice {{ $('Create Payment Voucher in ERP (mock)').item.json.invoice_id }} for {{ $('Create Payment Voucher in ERP (mock)').item.json.project }} has been approved.\n\nApproved amount: ${{ $('Create Payment Voucher in ERP (mock)').item.json.approved_amount }}\nRetainage withheld: ${{ $('Create Payment Voucher in ERP (mock)').item.json.retainage_withheld }}\nNet payable: ${{ $('Create Payment Voucher in ERP (mock)').item.json.net_payable }}\nPayment voucher: {{ $('Create Payment Voucher in ERP (mock)').item.json.voucher_id }}\n\nNotes: {{ $('Create Payment Voucher in ERP (mock)').item.json.notes }}\n\n(Demo data - fictional subcontractor)",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1776,
+        -64
+      ],
+      "id": "40142b6b-bed2-48d4-9511-56011d9cd59f",
+      "name": "Notify Subcontractor - Invoice Approved (Gmail)",
+      "webhookId": "65768ebb-e2ba-4a9b-ab69-c3d65e3474de",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "J4codUgGuAGiuqtx",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "2bb2ca52-eb59-495a-a5c2-b0ff5e239084",
+              "name": "invoice_id",
+              "value": "={{ $('Parse Agent Output').item.json.output.invoice_id }}",
+              "type": "string"
+            },
+            {
+              "id": "517b2ba7-8adf-48e5-847b-2216bae1ff9b",
+              "name": "subcontractor",
+              "value": "={{ $('Fetch Contract and SOV Details (mock)').item.json.subcontractor }}",
+              "type": "string"
+            },
+            {
+              "id": "f5f4dff9-4f67-4d76-baed-f83962b375a6",
+              "name": "status",
+              "value": "flagged_for_review",
+              "type": "string"
+            },
+            {
+              "id": "42e1acf7-a720-4801-b4c2-e1983517d54c",
+              "name": "supported_amount",
+              "value": "={{ $('Parse Agent Output').item.json.output.approved_amount }}",
+              "type": "number"
+            },
+            {
+              "id": "19e8e8b7-4531-4f7c-a4ac-5cf60e3a426c",
+              "name": "discrepancies",
+              "value": "={{ $('Parse Agent Output').item.json.output.discrepancies.join('; ') }}",
+              "type": "string"
+            },
+            {
+              "id": "75b31bec-edfe-4e40-9017-6e9973aa8401",
+              "name": "notes",
+              "value": "={{ $('Parse Agent Output').item.json.output.notes }}",
+              "type": "string"
+            },
+            {
+              "id": "b66634ee-b962-4068-bc20-d735af8d3bd9",
+              "name": "flagged_at",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1552,
+        160
+      ],
+      "id": "ea2bdd49-0576-4a84-ac17-1b74ad4d2976",
+      "name": "Flag Invoice for Manual Review"
+    },
+    {
+      "parameters": {
+        "sendTo": "mythrip11@gmail.com",
+        "subject": "=Invoice {{ $json.invoice_id }} needs correction",
+        "message": "=Hello {{ $json.subcontractor }},\n\nYour invoice {{ $json.invoice_id }} could not be approved yet.\n\nDiscrepancies: {{ $json.discrepancies }}\nAmount supported by verified progress: ${{ $json.supported_amount }}\nNotes: {{ $json.notes }}\n\nPlease correct and resubmit.\n\n(Demo data - fictional subcontractor)",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1776,
+        160
+      ],
+      "id": "121f5c67-3225-48b0-868f-6cedf5b53d13",
+      "name": "Notify Subcontractor - Invoice Flagged (Gmail)",
+      "webhookId": "bc1ddb39-efe3-45f5-961c-96f4df8f773f",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "J4codUgGuAGiuqtx",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Parse the agent's JSON reply into an `output` object. If the reply is empty or not valid JSON,\n// route the invoice to manual review instead of failing the whole run.\nconst inv = $('Fetch Contract and SOV Details (mock)').item.json;\nconst raw = String($json.output ?? '').trim();\nlet a = null;\ntry {\n  const start = raw.indexOf('{'), end = raw.lastIndexOf('}');\n  if (start !== -1 && end > start) a = JSON.parse(raw.slice(start, end + 1));\n} catch (e) { a = null; }\nif (!a) {\n  a = { invoice_id: inv.invoice_id, approved: false, approved_amount: 0, retainage_amount: 0, net_payable: 0,\n        discrepancies: ['Automated review returned no usable result - manual review required'],\n        notes: 'The AI model returned an empty or unreadable response for this invoice.' };\n}\nif (!Array.isArray(a.discrepancies)) a.discrepancies = [String(a.discrepancies || 'None')];\na.approved = (a.approved === true || a.approved === 'true');\nreturn { json: { output: a } };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1104,
+        304
+      ],
+      "id": "4ebce96f-ac62-4982-98e6-cb4bbc48d20b",
+      "name": "Parse Agent Output"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Weekly Invoice Review Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Pending Subcontractor Invoices (mock)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Pending Subcontractor Invoices (mock)": {
+      "main": [
+        [
+          {
+            "node": "Split Invoices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Invoices": {
+      "main": [
+        [
+          {
+            "node": "Fetch Contract and SOV Details (mock)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Contract and SOV Details (mock)": {
+      "main": [
+        [
+          {
+            "node": "Invoice Reconciliation Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Invoice Reconciliation Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invoice Reconciliation Agent": {
+      "main": [
+        [
+          {
+            "node": "Parse Agent Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invoice Approved?": {
+      "main": [
+        [
+          {
+            "node": "Create Payment Voucher in ERP (mock)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Flag Invoice for Manual Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Payment Voucher in ERP (mock)": {
+      "main": [
+        [
+          {
+            "node": "Notify Subcontractor - Invoice Approved (Gmail)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Flag Invoice for Manual Review": {
+      "main": [
+        [
+          {
+            "node": "Notify Subcontractor - Invoice Flagged (Gmail)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Agent Output": {
+      "main": [
+        [
+          {
+            "node": "Invoice Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "fbd3739a-7fd4-45c7-9de1-ce8e6bdb25e4",
+  "nodeGroups": [],
+  "id": "zeiInEHp8ntzlHcN",
+  "tags": []
+}

@@ -1,0 +1,470 @@
+{
+  "name": "TR-6: Freight Exception & Carrier Resolution Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        272
+      ],
+      "id": "7bab4010-d4b3-403b-8f1e-be33ee246554",
+      "name": "Hourly Freight Monitoring"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Mock in-transit freight shipments with exceptions (fictional) - stands in for a TMS API\nconst shipments = [\n  { shipment_id: 'SHP-5001', customer_name: 'Acme Foods (demo)', cargo: 'Refrigerated produce', cargo_value_usd: 185000, carrier: 'Demo Carrier A', exception_type: 'Reefer unit failure', exception_detail: 'Trailer temperature rose to 52F, limit is 38F. Driver stopped at a rest area.', delay_hours: 9, sla_deadline_hours: 6, location: 'Harrisburg, PA' },\n  { shipment_id: 'SHP-5002', customer_name: 'Brightline Retail (demo)', cargo: 'Boxed apparel', cargo_value_usd: 42000, carrier: 'Demo Carrier B', exception_type: 'Weather delay', exception_detail: 'Snow closure on I-80, truck holding at terminal. Expected to resume tomorrow morning.', delay_hours: 14, sla_deadline_hours: 48, location: 'Toledo, OH' },\n  { shipment_id: 'SHP-5003', customer_name: 'Cobalt Electronics (demo)', cargo: 'Server hardware', cargo_value_usd: 310000, carrier: 'Demo Carrier C', exception_type: 'Missed pickup appointment', exception_detail: 'Carrier arrived 3 hours after the dock window. Dock rescheduled for tomorrow.', delay_hours: 20, sla_deadline_hours: 24, location: 'Newark, NJ' },\n  { shipment_id: 'SHP-5004', customer_name: 'Dune Home Goods (demo)', cargo: 'Furniture', cargo_value_usd: 9500, carrier: 'Demo Carrier D', exception_type: 'Paperwork discrepancy', exception_detail: 'BOL piece count differs by 1 carton; receiver will accept with notation.', delay_hours: 1, sla_deadline_hours: 72, location: 'Atlanta, GA' },\n  { shipment_id: 'SHP-5005', customer_name: 'Everly Pharma (demo)', cargo: 'Over-the-counter medicine', cargo_value_usd: 76000, carrier: 'Demo Carrier E', exception_type: 'Late delivery', exception_detail: 'Driver running 3 hours behind due to traffic. New ETA 17:00 against a 14:00 appointment.', delay_hours: 3, sla_deadline_hours: 12, location: 'Columbus, OH' }\n];\nreturn [{ json: { fetched_at: new Date().toISOString(), shipments } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        272
+      ],
+      "id": "66d37c14-8bf6-45df-bb13-04df910aa40a",
+      "name": "Fetch Shipment Tracking Data (mock)"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "shipments",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1.1,
+      "position": [
+        448,
+        272
+      ],
+      "id": "ce03e727-f07b-46be-92ff-10cc83d8b1b7",
+      "name": "Split Shipments"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Shipment exception:\nShipment: {{ $json.shipment_id }}\nCustomer: {{ $json.customer_name }}\nCargo: {{ $json.cargo }} (value ${{ $json.cargo_value_usd }})\nCarrier: {{ $json.carrier }}\nLocation: {{ $json.location }}\nException: {{ $json.exception_type }}\nDetail: {{ $json.exception_detail }}\nDelay so far: {{ $json.delay_hours }} hours\nSLA deadline in: {{ $json.sla_deadline_hours }} hours",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a freight exception triage assistant for a freight broker. For one in-transit shipment with an exception, classify severity. critical = cargo at risk of spoilage or damage, high-value cargo (about $100,000 or more) at risk of missing its SLA, or delay hours close to or past the SLA deadline; standard = a real delay or issue likely to affect the customer but with SLA buffer remaining; low = minor issue, paperwork, or no customer impact. Write a one-sentence summary, a concrete recommended resolution for the account manager (for example, reroute, replace the trailer, or rebook the dock), and a short, honest, polite customer message. All data is fictional demo data. Respond only via the structured output."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        672,
+        272
+      ],
+      "id": "1abdc8e8-6083-499a-b119-eafe4ef46580",
+      "name": "Freight Exception Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-sonnet-5",
+          "mode": "list",
+          "cachedResultName": "Claude Sonnet 5"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.6,
+      "position": [
+        624,
+        480
+      ],
+      "id": "395ccc14-d60a-4396-be35-542fedd607aa",
+      "name": "Anthropic Chat Model",
+      "credentials": {
+        "anthropicApi": {
+          "id": "Jegc9bDEyLUiQn1K",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"shipment_id\": \"SHP-5001\",\n  \"severity\": \"critical\",\n  \"summary\": \"Reefer failure is putting $185k of produce at risk of spoilage.\",\n  \"recommended_resolution\": \"Dispatch a replacement reefer trailer and transfer the load.\",\n  \"customer_message\": \"Your shipment has a temperature equipment issue. We are transferring the load and will update you within the hour.\"\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        784,
+        480
+      ],
+      "id": "76dfd260-5c5d-4c5a-86b6-143eb5281d62",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "fe43b9d0-8fd9-496a-91ac-5ad61a85268a",
+                    "leftValue": "={{ $json.output.severity }}",
+                    "rightValue": "critical",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "critical"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "2e2175d9-6553-46e6-bd34-a837e3b21636",
+                    "leftValue": "={{ $json.output.severity }}",
+                    "rightValue": "standard",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "standard"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "a33c47b5-0c85-4e01-825e-ad6757938a8f",
+                    "leftValue": "={{ $json.output.severity }}",
+                    "rightValue": "low",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "low"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1008,
+        272
+      ],
+      "id": "d1e948d3-736c-47d3-9edb-8e79aed6fbdb",
+      "name": "Route by Exception Severity"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Mock CRM case creation (fictional) - stands in for a CRM API\nconst a = $('Freight Exception Agent').item.json.output;\nconst s = $('Split Shipments').item.json;\nreturn { json: { case_id: 'CASE-' + Math.floor(Math.random()*90000+10000), shipment_id: a.shipment_id, customer_name: s.customer_name, cargo: s.cargo, cargo_value_usd: s.cargo_value_usd, severity: a.severity, exception_type: s.exception_type, summary: a.summary, recommended_resolution: a.recommended_resolution, customer_message: a.customer_message, created_at: new Date().toISOString() } };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1232,
+        64
+      ],
+      "id": "27c4bdc5-f888-46d4-9393-4ce064e3e9d3",
+      "name": "Create Critical Exception Case (mock)"
+    },
+    {
+      "parameters": {
+        "sendTo": "mythrip11@gmail.com",
+        "subject": "=CRITICAL freight exception {{ $('Create Critical Exception Case (mock)').item.json.shipment_id }}: {{ $('Create Critical Exception Case (mock)').item.json.customer_name }}",
+        "message": "=Critical exception on shipment {{ $('Create Critical Exception Case (mock)').item.json.shipment_id }} ({{ $('Create Critical Exception Case (mock)').item.json.customer_name }}).\n\nCase: {{ $('Create Critical Exception Case (mock)').item.json.case_id }}\nCargo: {{ $('Create Critical Exception Case (mock)').item.json.cargo }} (value ${{ $('Create Critical Exception Case (mock)').item.json.cargo_value_usd }})\nIssue: {{ $('Create Critical Exception Case (mock)').item.json.exception_type }}\nSummary: {{ $('Create Critical Exception Case (mock)').item.json.summary }}\n\nRecommended resolution: {{ $('Create Critical Exception Case (mock)').item.json.recommended_resolution }}\n\n(Demo data - fictional shipment)",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1456,
+        0
+      ],
+      "id": "188b3ce4-33e0-488d-b3e4-b91d37a3020d",
+      "name": "Alert Account Manager - Critical (Gmail)",
+      "webhookId": "8574bfaf-87e1-4b34-9f98-dd909f747840",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "J4codUgGuAGiuqtx",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "mythrip11@gmail.com",
+        "subject": "=Important update on your shipment {{ $('Create Critical Exception Case (mock)').item.json.shipment_id }}",
+        "message": "=Hello {{ $('Create Critical Exception Case (mock)').item.json.customer_name }},\n\n{{ $('Create Critical Exception Case (mock)').item.json.customer_message }}\n\nReference: {{ $('Create Critical Exception Case (mock)').item.json.case_id }}\n\n(Demo data - fictional shipment)",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1680,
+        0
+      ],
+      "id": "dea3a8cf-844f-473e-bdfc-7a6793a0688a",
+      "name": "Notify Customer - Critical Exception (Gmail)",
+      "webhookId": "b6944c9c-72ff-4ddc-bfec-2ef73ac187c0",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "J4codUgGuAGiuqtx",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Mock CRM case creation (fictional) - stands in for a CRM API\nconst a = $('Freight Exception Agent').item.json.output;\nconst s = $('Split Shipments').item.json;\nreturn { json: { case_id: 'CASE-' + Math.floor(Math.random()*90000+10000), shipment_id: a.shipment_id, customer_name: s.customer_name, cargo: s.cargo, cargo_value_usd: s.cargo_value_usd, severity: a.severity, exception_type: s.exception_type, summary: a.summary, recommended_resolution: a.recommended_resolution, customer_message: a.customer_message, created_at: new Date().toISOString() } };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1232,
+        272
+      ],
+      "id": "d0b3674d-184d-46a0-9d41-28e34cbec04d",
+      "name": "Create Standard Exception Case (mock)"
+    },
+    {
+      "parameters": {
+        "sendTo": "mythrip11@gmail.com",
+        "subject": "=Update on your shipment {{ $('Create Standard Exception Case (mock)').item.json.shipment_id }}",
+        "message": "=Hello {{ $('Create Standard Exception Case (mock)').item.json.customer_name }},\n\n{{ $('Create Standard Exception Case (mock)').item.json.customer_message }}\n\nReference: {{ $('Create Standard Exception Case (mock)').item.json.case_id }}\n\n(Demo data - fictional shipment)",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1456,
+        272
+      ],
+      "id": "4d6ef26c-d323-4a80-b6a1-fc1fad8402da",
+      "name": "Notify Customer - Standard Exception (Gmail)",
+      "webhookId": "d713de5d-1f82-4fd9-93d4-3a24f9e59899",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "J4codUgGuAGiuqtx",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ecee690b-0c2e-428f-99df-8ecda3c2f241",
+              "name": "shipment_id",
+              "value": "={{ $('Freight Exception Agent').item.json.output.shipment_id }}",
+              "type": "string"
+            },
+            {
+              "id": "3451a174-4208-4edb-9859-40b885e5027a",
+              "name": "severity",
+              "value": "low",
+              "type": "string"
+            },
+            {
+              "id": "fc657674-cdf3-45d0-b5d0-6d45cd912115",
+              "name": "summary",
+              "value": "={{ $('Freight Exception Agent').item.json.output.summary }}",
+              "type": "string"
+            },
+            {
+              "id": "1bc152bc-892e-474c-a33b-9a4e549f0c29",
+              "name": "logged_at",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1232,
+        464
+      ],
+      "id": "4f9f9b28-a6de-4e40-9c4e-2675a744b860",
+      "name": "Log Low Severity Exception"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Hourly Freight Monitoring": {
+      "main": [
+        [
+          {
+            "node": "Fetch Shipment Tracking Data (mock)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Shipment Tracking Data (mock)": {
+      "main": [
+        [
+          {
+            "node": "Split Shipments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Shipments": {
+      "main": [
+        [
+          {
+            "node": "Freight Exception Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Freight Exception Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Freight Exception Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Freight Exception Agent": {
+      "main": [
+        [
+          {
+            "node": "Route by Exception Severity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Exception Severity": {
+      "main": [
+        [
+          {
+            "node": "Create Critical Exception Case (mock)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create Standard Exception Case (mock)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Low Severity Exception",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Critical Exception Case (mock)": {
+      "main": [
+        [
+          {
+            "node": "Alert Account Manager - Critical (Gmail)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert Account Manager - Critical (Gmail)": {
+      "main": [
+        [
+          {
+            "node": "Notify Customer - Critical Exception (Gmail)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Standard Exception Case (mock)": {
+      "main": [
+        [
+          {
+            "node": "Notify Customer - Standard Exception (Gmail)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "78c27ebc-4575-42fd-9726-b56e3af2eb46",
+  "nodeGroups": [],
+  "id": "xMh8W4zth3fpzm2s",
+  "tags": []
+}

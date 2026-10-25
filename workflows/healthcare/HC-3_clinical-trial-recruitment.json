@@ -1,0 +1,357 @@
+{
+  "name": "HC-3: Clinical Trial Recruitment & Screening Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "id": "20e368a9-d695-4808-b48c-f11cd8fca6f7",
+      "name": "Daily Trial Recruitment Run"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\nreturn [{ json: { patients: [\n  { patient_id: 'T-101', age: 58, diagnosis: 'Type 2 diabetes', hba1c: 8.4, egfr: 72, on_insulin: false, pregnant: false, contact_email: 'mythrip11@gmail.com' },\n  { patient_id: 'T-102', age: 34, diagnosis: 'Type 2 diabetes', hba1c: 9.0, egfr: 90, on_insulin: false, pregnant: false, contact_email: 'mythrip11@gmail.com' },\n  { patient_id: 'T-103', age: 66, diagnosis: 'Type 2 diabetes', hba1c: 9.1, egfr: 38, on_insulin: false, pregnant: false, contact_email: 'mythrip11@gmail.com' },\n  { patient_id: 'T-104', age: 49, diagnosis: 'Type 2 diabetes', hba1c: 7.9, egfr: 88, on_insulin: false, pregnant: false, contact_email: 'mythrip11@gmail.com' },\n  { patient_id: 'T-105', age: 71, diagnosis: 'Type 2 diabetes', hba1c: 6.8, egfr: 65, on_insulin: true, pregnant: false, contact_email: 'mythrip11@gmail.com' }\n] } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ],
+      "id": "b37ed5f4-c9bd-4789-acc8-d1c0b0f4fa51",
+      "name": "Fetch Patient Candidates (mock EHR)"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "patients",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1.1,
+      "position": [
+        448,
+        0
+      ],
+      "id": "75b4af6a-d5e1-41c0-96fe-57daac527138",
+      "name": "Split Patient Candidates"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Screen this patient for the trial: {{ JSON.stringify($json) }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You screen patients for the fictional INNOVATE-DM2 Phase III diabetes trial. A patient is eligible only if ALL of these are true: type 2 diabetes, age 40 to 75 inclusive, HbA1c between 7.5 and 10.5 inclusive, eGFR of 45 or higher, not on insulin, not pregnant. Return whether the patient is eligible, the patient_id, a one-sentence reason, and a short, friendly outreach message if eligible (empty string if not). This is fictional demo data."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        672,
+        0
+      ],
+      "id": "2bc76e3a-6496-47ac-834c-9f4398e5fcac",
+      "name": "Trial Eligibility Screening Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "claude-sonnet-5",
+          "cachedResultName": "Claude Sonnet 5"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.6,
+      "position": [
+        528,
+        208
+      ],
+      "id": "4154b177-bba7-49f6-92a8-9958f35959d4",
+      "name": "Anthropic Chat Model",
+      "credentials": {
+        "anthropicApi": {
+          "id": "Jegc9bDEyLUiQn1K",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\"patient_id\":\"T-101\",\"eligible\":true,\"reason\":\"Meets all inclusion criteria and no exclusions.\",\"outreach_message\":\"You may qualify for a diabetes research study. Would you like to learn more?\"}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        848,
+        208
+      ],
+      "id": "340c8d63-ded6-44c0-a03e-d68395ecf873",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "d5415cfc-7291-400c-80d8-5293b2551f82",
+              "leftValue": "={{ $json.output.eligible }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        944,
+        0
+      ],
+      "id": "16b48e9f-6d51-4308-9004-63e4ac4c8d77",
+      "name": "Patient Eligible for Trial?"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Split Patient Candidates').item.json.contact_email }}",
+        "subject": "You may qualify for a diabetes research study",
+        "message": "={{ $('Trial Eligibility Screening Agent').item.json.output.outreach_message }}\n\nPatient ID: {{ $('Trial Eligibility Screening Agent').item.json.output.patient_id }}\n(Demo message from an n8n portfolio project. Fictional data.)",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1168,
+        -112
+      ],
+      "id": "161e04e7-9de8-4b66-ab41-213afa1052ac",
+      "name": "Send Trial Outreach Email (Gmail)",
+      "webhookId": "8ba17f36-4838-46fd-a037-d9e4019c57a7",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "J4codUgGuAGiuqtx",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8b993a71-91d5-4070-8153-76c3dfdb8821",
+              "name": "patient_id",
+              "value": "={{ $('Trial Eligibility Screening Agent').item.json.output.patient_id }}",
+              "type": "string"
+            },
+            {
+              "id": "abfd0d6a-516e-4e16-91e6-4056cff8a548",
+              "name": "eligible",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "6c2327de-376f-41a8-a08d-fe3c35bd55b2",
+              "name": "reason",
+              "value": "={{ $('Trial Eligibility Screening Agent').item.json.output.reason }}",
+              "type": "string"
+            },
+            {
+              "id": "66d0bf5c-46dc-4cb1-a336-92ac1b507264",
+              "name": "screened_at",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1344,
+        -112
+      ],
+      "id": "8dc00363-6a21-42a3-8646-50bc5d835ac0",
+      "name": "Log Eligible Candidate to CRM"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "40c244b3-a57d-4f18-a4ca-dc77cdd6ad88",
+              "name": "patient_id",
+              "value": "={{ $('Trial Eligibility Screening Agent').item.json.output.patient_id }}",
+              "type": "string"
+            },
+            {
+              "id": "4040707f-e2dd-45bc-8c12-d5536e215769",
+              "name": "eligible",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "9bead031-b031-4ee2-8749-7fd3be02f60a",
+              "name": "reason",
+              "value": "={{ $('Trial Eligibility Screening Agent').item.json.output.reason }}",
+              "type": "string"
+            },
+            {
+              "id": "8f4fc77f-1c82-4184-b9f1-a9e0e9fd5480",
+              "name": "screened_at",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1168,
+        96
+      ],
+      "id": "7228e94d-10ae-4e72-8439-30e7e12ca369",
+      "name": "Log Ineligible Candidate"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Daily Trial Recruitment Run": {
+      "main": [
+        [
+          {
+            "node": "Fetch Patient Candidates (mock EHR)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Patient Candidates (mock EHR)": {
+      "main": [
+        [
+          {
+            "node": "Split Patient Candidates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Patient Candidates": {
+      "main": [
+        [
+          {
+            "node": "Trial Eligibility Screening Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Trial Eligibility Screening Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Trial Eligibility Screening Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trial Eligibility Screening Agent": {
+      "main": [
+        [
+          {
+            "node": "Patient Eligible for Trial?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Patient Eligible for Trial?": {
+      "main": [
+        [
+          {
+            "node": "Send Trial Outreach Email (Gmail)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Ineligible Candidate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Trial Outreach Email (Gmail)": {
+      "main": [
+        [
+          {
+            "node": "Log Eligible Candidate to CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "a9215466-3407-4681-83ab-1ea7e847a69d",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "nodeGroups": [],
+  "id": "DcLjYQlApm1Sh1tH",
+  "tags": []
+}

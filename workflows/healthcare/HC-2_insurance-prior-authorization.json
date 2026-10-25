@@ -1,0 +1,356 @@
+{
+  "name": "HC-2 Insurance Prior Authorization",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "prior-auth-request",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        336
+      ],
+      "id": "ff08f2b7-d508-4a30-9565-ebb81c6877f0",
+      "name": "Prior Auth Request Webhook",
+      "webhookId": "014b20ba-4d0d-4728-a9c1-b1838daf4e98"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize the incoming prior-authorization request and run a MOCK insurance eligibility check.\n// All data here is fictional. Replace the mock with a real payer eligibility API in production.\nconst body = $input.first().json.body || $input.first().json;\n\nconst plans = {\n  \"GOLD-100\": { payer: \"Demo Health Plan\", active: true, requiresPriorAuth: [\"MRI\",\"CT\",\"Knee Replacement\",\"Specialty Drug\"] },\n  \"SILVER-200\": { payer: \"Demo Health Plan\", active: true, requiresPriorAuth: [\"MRI\",\"Knee Replacement\"] },\n  \"LAPSED-000\": { payer: \"Demo Health Plan\", active: false, requiresPriorAuth: [] }\n};\n\nconst plan = plans[body.plan_id] || { payer: \"Unknown\", active: false, requiresPriorAuth: [] };\n\nreturn [{\n  json: {\n    request_id: body.request_id || (\"PA-\" + Date.now()),\n    patient_name: body.patient_name || \"Unknown\",\n    patient_age: body.patient_age || null,\n    plan_id: body.plan_id || \"UNKNOWN\",\n    procedure: body.procedure || \"Unknown\",\n    diagnosis: body.diagnosis || \"Not provided\",\n    clinical_notes: body.clinical_notes || \"None provided\",\n    prior_treatments: body.prior_treatments || \"None documented\",\n    provider_name: body.provider_name || \"Unknown provider\",\n    payer: plan.payer,\n    coverage_active: plan.active,\n    prior_auth_required: plan.requiresPriorAuth.includes(body.procedure)\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        336
+      ],
+      "id": "646f012a-4672-4ee1-8bc7-48f991b57912",
+      "name": "Check Insurance Eligibility (mock)"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cf80d23b-53b9-46ae-9e55-9445d84930b4",
+              "leftValue": "={{ $json.coverage_active }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        448,
+        336
+      ],
+      "id": "5759a81e-3cc2-492c-b096-3eac1a8e2d1f",
+      "name": "Coverage Active?"
+    },
+    {
+      "parameters": {
+        "sendTo": "mythrip11@gmail.com",
+        "subject": "=Prior Auth {{ $json.request_id }}: coverage inactive",
+        "message": "=Prior authorization request {{ $json.request_id }} for {{ $json.patient_name }} ({{ $json.procedure }}) could not be processed.\n\nReason: insurance plan {{ $json.plan_id }} is not active.\n\nPlease verify the patient's coverage and resubmit.\n\n(Demo data - fictional patient)",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        688,
+        576
+      ],
+      "id": "e577caab-8633-4845-9279-21c4b5ef63aa",
+      "name": "Notify Provider: Coverage Inactive",
+      "webhookId": "3f4d8e32-18c1-48ef-b781-398ece61fc2c",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "J4codUgGuAGiuqtx",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Prior authorization request:\nPatient: {{ $json.patient_name }}, age {{ $json.patient_age }}\nProcedure requested: {{ $json.procedure }}\nDiagnosis: {{ $json.diagnosis }}\nClinical notes: {{ $json.clinical_notes }}\nPrior treatments: {{ $json.prior_treatments }}\nPayer: {{ $json.payer }}\nPrior auth required by plan: {{ $json.prior_auth_required }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a utilization-review nurse assistant evaluating prior authorization requests against typical medical-necessity criteria. Decide if the documentation supports medical necessity. Criteria are met only if the diagnosis supports the procedure AND conservative/prior treatments are documented as tried or contraindicated AND clinical notes show objective findings. If not met, list exactly which documents or details are missing. All data is fictional demo data. Respond only via the structured output."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        672,
+        192
+      ],
+      "id": "78ec4099-edbf-4e61-a185-ca8d629908ec",
+      "name": "Medical Necessity Assessment Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-sonnet-5",
+          "mode": "list",
+          "cachedResultName": "Claude Sonnet 5"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.6,
+      "position": [
+        624,
+        416
+      ],
+      "id": "fbf77aff-ad01-4910-a11a-26e7c95fd2f0",
+      "name": "Anthropic Chat Model",
+      "credentials": {
+        "anthropicApi": {
+          "id": "Jegc9bDEyLUiQn1K",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"criteria_met\": true,\n  \"confidence\": 0.85,\n  \"rationale\": \"Diagnosis supports the procedure and conservative treatment failed.\",\n  \"missing_documents\": [\n    \"Physical therapy notes\"\n  ]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        784,
+        416
+      ],
+      "id": "0bf7e39c-0e87-4bb4-b538-1185ca300a88",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d8e7691b-9362-465c-b4aa-4f3baeb5e150",
+              "leftValue": "={{ $json.output.criteria_met }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        1008,
+        192
+      ],
+      "id": "60979616-8c9f-4fda-8e8c-6ca7741cece4",
+      "name": "Criteria Met?"
+    },
+    {
+      "parameters": {
+        "jsCode": "// MOCK payer submission. Replace with an HTTP Request node to a real payer API.\nconst req = $('Check Insurance Eligibility (mock)').first().json;\nconst a = $('Medical Necessity Assessment Agent').first().json.output;\nreturn [{ json: {\n  request_id: req.request_id,\n  patient_name: req.patient_name,\n  procedure: req.procedure,\n  payer: req.payer,\n  rationale: a.rationale,\n  submission_status: \"SUBMITTED (mock)\",\n  payer_reference: \"PAYER-\" + Math.floor(Math.random()*900000+100000)\n}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1232,
+        64
+      ],
+      "id": "f0ec84ac-1ac4-4dc9-bd9a-5b56da5d79ef",
+      "name": "Submit to Payer (mock)"
+    },
+    {
+      "parameters": {
+        "sendTo": "mythrip11@gmail.com",
+        "subject": "=Prior Auth {{ $json.request_id }}: submitted to payer",
+        "message": "=Prior authorization {{ $json.request_id }} for {{ $json.patient_name }} ({{ $json.procedure }}) met medical-necessity criteria and was submitted to {{ $json.payer }}.\n\nPayer reference: {{ $json.payer_reference }}\nAI rationale: {{ $json.rationale }}\n\n(Demo data - fictional patient)",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1440,
+        64
+      ],
+      "id": "1f0abb37-a55c-4720-8bce-b844217f7c8d",
+      "name": "Notify Provider: Submitted",
+      "webhookId": "ccfc4623-2171-4ffb-af57-cd3fd58751c2",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "J4codUgGuAGiuqtx",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "mythrip11@gmail.com",
+        "subject": "=Prior Auth {{ $('Check Insurance Eligibility (mock)').item.json.request_id }}: more documentation needed",
+        "message": "=Prior authorization for {{ $('Check Insurance Eligibility (mock)').item.json.patient_name }} ({{ $('Check Insurance Eligibility (mock)').item.json.procedure }}) does not yet meet medical-necessity criteria.\n\nRationale: {{ $json.output.rationale }}\n\nMissing documents: {{ $json.output.missing_documents.join(', ') }}\n\nPlease supply these and resubmit.\n\n(Demo data - fictional patient)",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1232,
+        336
+      ],
+      "id": "2c2cb72e-7f81-4b80-bae1-a401fc7b0542",
+      "name": "Notify Provider: Missing Documentation",
+      "webhookId": "534ec7d8-7848-4101-93d4-815b2090522d",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "J4codUgGuAGiuqtx",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Prior Auth Request Webhook": {
+      "main": [
+        [
+          {
+            "node": "Check Insurance Eligibility (mock)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Insurance Eligibility (mock)": {
+      "main": [
+        [
+          {
+            "node": "Coverage Active?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Coverage Active?": {
+      "main": [
+        [
+          {
+            "node": "Medical Necessity Assessment Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify Provider: Coverage Inactive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Medical Necessity Assessment Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Medical Necessity Assessment Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Medical Necessity Assessment Agent": {
+      "main": [
+        [
+          {
+            "node": "Criteria Met?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Criteria Met?": {
+      "main": [
+        [
+          {
+            "node": "Submit to Payer (mock)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify Provider: Missing Documentation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Submit to Payer (mock)": {
+      "main": [
+        [
+          {
+            "node": "Notify Provider: Submitted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "755e3260-94e0-41f8-9d22-4fcccb21c301",
+  "nodeGroups": [],
+  "id": "o7EECOeqGPHZnAy2",
+  "tags": []
+}
